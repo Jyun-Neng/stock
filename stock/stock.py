@@ -145,7 +145,10 @@ class Stock(analytics.Analytics, plot.Plot):
         if date_list[-1] <= last_date:
             return
         idx = 0
-        self.collection.update_one(query, {"$set": {"latest_date": last_date}})
+        self.collection.update_one(query,
+                                   {"$set": {
+                                       "latest_date": date_list[-1]
+                                   }})
         for date in date_list:
             if date > last_date:
                 break
@@ -177,6 +180,21 @@ class Stock(analytics.Analytics, plot.Plot):
         }
         self.collection.update_one(query, update)
 
+    def update(self) -> int:
+        """Update stock daily information in DB to the latest trading day.
+
+        Returns:
+            Return 1 if require update DB. Otherwise, return 0.
+        """
+        date = self.getDate[-1]
+        today = datetime.today()
+        if today > date:
+            self.fetchFrom(date.year, date.month)
+            self.updateToDB()
+            return 1
+        else:
+            return 0
+
     def fetch(self, year: int, month: int):
         """Fetch stock daily information in specified month.
 
@@ -195,27 +213,43 @@ class Stock(analytics.Analytics, plot.Plot):
             daily_info_list = self._dataFormatter(raw_data["data"])
         return daily_info_list
 
-    def fetchFrom(self, start_year: int, start_month: int):
+    def fetchn(self, start_year: int, start_mon: int, n: int) -> list:
+        """Fetch n months of stock daily infromation.
+
+        Args:
+            start_year: start year to fetch the data.
+            start_mon: start month to fetch the data.
+            n: specify the number of months to fetch stock information.
+        Returns:    
+            A list of all the daily information.
+        """
+        year, mon = start_year, start_mon
+        for i in range(n):
+            print("fetch %d-%02d" % (year, mon))
+            self.daily_info_list += self.fetch(year, mon)
+            year = year + 1 if mon == 12 else year
+            mon = mon + 1 if mon < 12 else 1
+            time.sleep(3)
+        return self.daily_info_list
+
+    def fetchFrom(self, start_year: int, start_mon: int) -> list:
         """Fetch stock daily infromation from year-month to today.
 
         Args:
             start_year: start year to fetch the data.
-            start_month: start month to fetch the data.
+            start_mon: start month to fetch the data.
         Returns:    
             A list of all the daily information.
         """
         today = datetime.today()
-        cur_year, cur_month = today.year, today.month
-        total_month = (12 * (cur_year - start_year) +
-                       (cur_month - start_month) + 1)
-        for i in range(total_month):
-            inc_year, fetch_month = divmod(start_month + i, 12)
-            fetch_year = (
-                start_year + inc_year if fetch_month > 0 else start_year +
-                inc_year - 1)
-            fetch_month = fetch_month if fetch_month > 0 else 12
-            print("fetch %d-%02d" % (fetch_year, fetch_month))
-            self.daily_info_list += self.fetch(fetch_year, fetch_month)
+        total_mon = (12 * (today.year - start_year) +
+                     (today.month - start_mon) + 1)
+        year, mon = start_year, start_mon
+        for i in range(total_mon):
+            print("fetch %d-%02d" % (year, mon))
+            self.daily_info_list += self.fetch(year, mon)
+            year = year + 1 if mon == 12 else year
+            mon = mon + 1 if mon < 12 else 1
             time.sleep(3)
         return self.daily_info_list
 
