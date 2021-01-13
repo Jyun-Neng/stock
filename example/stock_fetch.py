@@ -3,10 +3,8 @@ from stock import parser
 
 args = parser.parsing()
 stock = stock.Stock(args)
-stock.fetchFrom(args.year, args.month)
+stock.fetchn(args.year, args.month, 12)
 if stock.collection.find_one({"stock_id": args.id}) is None:
     stock.addToDB()
 else:
     stock.updateToDB()
-df = stock.raisingFallingDaysDist()
-stock.plot2DHist(df)
