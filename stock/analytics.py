@@ -43,6 +43,16 @@ class Analytics(stockDB.StockDB):
         })
         return field["daily_pricing"]
 
+    @property
+    def _getTradingVolume(self) -> list:
+        assert self.isStockExist(
+        ), "No stock information in DB. Plz fetch it first."
+        field = self.collection.find_one({"stock_id": self.stock_id}, {
+            "trading_volume": 1,
+            "_id": 0
+        })
+        return field["trading_volume"]
+
     def isStockExist(self) -> bool:
         doc = self.collection.find_one({"stock_id": self.stock_id})
         return doc is not None
@@ -128,21 +138,73 @@ class Analytics(stockDB.StockDB):
         return np.round((cur_cp_list - last_cp_list) * 100 / last_cp_list,
                         4).tolist()
 
-    def movingAverage(self, days: int) -> list:
-        """Calculate the moving average.
+    def sma(self, data_list: list, days: int) -> list:
+        """Calculate moving average.
         
         Args:
-            cp_list: A list of daily closing price.
+            data_list: Data list to calculate moving average.
             days: The average days.
         Returns:
             A list of moving average.
         """
-        cp_list = self._getClosingPrice
-        total_price = sum(cp_list[:days])
+        data_list = data_list[:]
+        total_price = sum(data_list[:days])
         ma_list = [round(total_price / days, 2)]
-        while len(cp_list) > days:
-            cur_price = cp_list[days]
-            removed_price = cp_list.pop(0)
+        while len(data_list) > days:
+            cur_price = data_list[days]
+            removed_price = data_list.pop(0)
             total_price = total_price - removed_price + cur_price
             ma_list.append(round(total_price / days, 2))
         return ma_list
+
+    def ema(self, data_list: list, days: int) -> list:
+        """Calculate exponential moving average.
+
+        Args:
+            data_list: Data list to calculate exponential moving average.
+            days: The average days.
+        Returns:
+            A list of exponential moving average.
+        """
+        data_list = data_list[:]
+        total = sum(data_list[:days])
+        # The first EMA is SMA.
+        ema_list = [round(total / days, 2)]
+        for cur_data in data_list[days:]:
+            last_ema = ema_list[-1]
+            cur_ema = round(
+                ((2 * cur_data + (days - 1) * last_ema) / (days + 1)), 2)
+            ema_list.append(cur_ema)
+        return ema_list
+
+    def dif(self, data_list: list, short=12, long=26) -> list:
+        """Calculate DIF.
+
+        Args:
+            data_list: Data list to calculate DIF.
+            short: short days to calculate EMA. Default is 12 days.
+            long: long days to calculate EMA. Default is 26 days.
+        Returns:
+            A list of DIF.
+        """
+        ema_short = self.ema(data_list, short)
+        ema_long = self.ema(data_list, long)
+        dif_days = long - short
+        ema_short = ema_short[dif_days:]
+        dif_list = np.array(ema_short) - np.array(ema_long)
+        return dif_list.tolist()
+
+    def macd(self, data_list: list, short=12, long=26, n=9) -> list:
+        """Calculate MACD.
+        
+        Args:
+            data_list: Data list to calculate MACD.
+            short: short days to calculate EMA. Default is 12 days.
+            long: long days to calculate EMA. Default is 26 days.
+            n: the # of days to calculate MACD. Default is 9 days.
+        Returns:
+            A list of MACD.
+        """
+        dif_list = self.dif(data_list, short, long)
+        macd_list = self.ema(dif_list, n)
+        return macd_list
